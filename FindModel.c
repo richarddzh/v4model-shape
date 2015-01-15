@@ -62,6 +62,7 @@ int ExtendTree(int fromx, int fromy)
         MyTree[treeLen].parent = i;
         MyTree[treeLen].depth = MyTree[i].depth + 1;
         MyTree[treeLen].root = (i == 0) ? treeLen : MyTree[i].root;
+        MyTree[treeLen].neighbor = 0;
         OUT(x,y) = TREE;
         treeLen++;
       }
