@@ -20,7 +20,15 @@ struct _param_t_
 
 struct _tree_t_
 {
-  int parent, x, y, root, depth, neighbor;
+  struct _tree1_t_
+  {
+    int parent, firstChild, nextSibling, depth, extended;
+  } build;
+  struct _tree2_t_
+  {
+    int parent, depth, visited;
+  } traverse;
+  int x, y;
 } MyTree[MAXLINE];
 
 struct _line_t_ 
@@ -31,16 +39,33 @@ struct _line_t_
   mxArray * cells[MAXNUMLINE];
 } MyLines;
 
+void TraverseTree(int node, int depth, int parent, int * maxDepthIdx)
+{
+  int i;
+  if (node < 0 || MyTree[node].traverse.visited) return;
+  MyTree[node].traverse.parent = parent;
+  MyTree[node].traverse.depth = depth;
+  MyTree[node].traverse.visited = 1;
+  if (depth > MyTree[*maxDepthIdx].traverse.depth) *maxDepthIdx = node;
+  TraverseTree(MyTree[node].build.parent, depth + 1, node, maxDepthIdx);
+  for (i = MyTree[node].build.firstChild; i >= 0; i = MyTree[i].build.nextSibling)
+  {
+    TraverseTree(i, depth + 1, node, maxDepthIdx);
+  }
+}
+
 int ExtendTree(int fromx, int fromy)
 {
   int i, j, treeLen = 1, x, y, end1, end2, minNeighbor;
   if (!RIDGE(fromx,fromy) || OUT(fromx,fromy)) return 0;
-  MyTree[0].parent = 0;
   MyTree[0].x = fromx;
   MyTree[0].y = fromy;
-  MyTree[0].root = 0; /* the ancestor that is direct child of MyTree[0] */
-  MyTree[0].depth = 0; /* levels from MyTree[0] */
-  MyTree[0].neighbor = 0; /* extended neighbor */
+  MyTree[0].build.parent = -1;
+  MyTree[0].build.firstChild = -1;
+  MyTree[0].build.nextSibling = -1;
+  MyTree[0].build.depth = 0;
+  MyTree[0].build.extended = 0;
+  MyTree[0].traverse.visited = 0;
   OUT(fromx,fromy) = TREE;
 
   /* extend tree node */
@@ -49,55 +74,52 @@ int ExtendTree(int fromx, int fromy)
     minNeighbor = MyParam.neighbor;
     for (i = 0; i < treeLen && i < MAXLINE; i++)
     {
-      if (MyTree[i].neighbor >= MyParam.neighbor) continue;
-      MyTree[i].neighbor++;
-      for (x = MyTree[i].x - MyTree[i].neighbor; x <= MyTree[i].x + MyTree[i].neighbor; x++)
-      for (y = MyTree[i].y - MyTree[i].neighbor; y <= MyTree[i].y + MyTree[i].neighbor; y++)
+      int extended = MyTree[i].build.extended;
+      if (treeLen >= MAXLINE) break;
+      if (extended >= MyParam.neighbor) continue;
+      extended++;
+      for (x = MyTree[i].x - extended; x <= MyTree[i].x + extended; x++)
+      for (y = MyTree[i].y - extended; y <= MyTree[i].y + extended; y++)
       {
-        if (treeLen >= MAXLINE) break;
         if (x < 0 || y < 0 || x >= MyParam.w || y >= MyParam.h) continue;
         if (!RIDGE(x,y) || OUT(x,y)) continue;
         MyTree[treeLen].x = x;
         MyTree[treeLen].y = y;
-        MyTree[treeLen].parent = i;
-        MyTree[treeLen].depth = MyTree[i].depth + 1;
-        MyTree[treeLen].root = (i == 0) ? treeLen : MyTree[i].root;
-        MyTree[treeLen].neighbor = 0;
+        MyTree[treeLen].build.parent = i;
+        MyTree[treeLen].build.firstChild = -1;
+        MyTree[treeLen].build.nextSibling = MyTree[i].build.firstChild;
+        MyTree[i].build.firstChild = treeLen;
+        MyTree[treeLen].build.depth = MyTree[i].build.depth + 1;
+        MyTree[treeLen].build.extended = 0;
+        MyTree[treeLen].traverse.visited = 0;
+        minNeighbor = 0;
         OUT(x,y) = TREE;
         treeLen++;
       }
-      if (MyTree[i].neighbor < minNeighbor) minNeighbor = MyTree[i].neighbor;
+      if (extended < minNeighbor) minNeighbor = extended;
+      MyTree[i].build.extended = extended;
     }
   } while (minNeighbor < MyParam.neighbor);
   
   /* find longest path */
-  for (end1 = -1, i = 0; i < treeLen; i++) if (end1 == -1 || MyTree[i].depth > MyTree[end1].depth) end1 = i;
-  for (end2 = -1, i = 0; i < treeLen; i++)
+  for (end1 = -1, i = 0; i < treeLen; i++) 
   {
     OUT(MyTree[i].x, MyTree[i].y) = 0;
-    if (MyTree[i].root == MyTree[end1].root) continue;
-    if (end2 == -1 || MyTree[i].depth > MyTree[end2].depth) end2 = i;
+    if (end1 == -1 || MyTree[i].build.depth > MyTree[end1].build.depth) end1 = i;
   }
-  if (end1 == -1 || end2 == -1) return 0;
-  MyLines.length = MyTree[end1].depth + MyTree[end2].depth + 1;
-  if (MyLines.length < MyParam.minLength) return 0;
+  if (end1 == -1) return 0;
+  end2 = end1;
+  TraverseTree(end1, 0, -1, &end2);
+  if (MyTree[end2].traverse.depth + 1 < MyParam.minLength) return 0;
+
+  /* save path from end2 to end1 */
   MyLines.count++;
-  for (j = 0, i = end1; MyTree[i].root; i = MyTree[i].parent) 
+  for (j = 0, i = end2; i >= 0; i = MyTree[i].traverse.parent) 
   {
     OUT(MyTree[i].x, MyTree[i].y) = MyLines.count;
     MyLines.line[j][0] = MyTree[i].x;
     MyLines.line[j][1] = MyTree[i].y;
     j++;
-  }
-  OUT(MyTree[0].x, MyTree[0].y) = MyLines.count;
-  MyLines.line[j][0] = MyTree[0].x;
-  MyLines.line[j][1] = MyTree[0].y;
-  for (j = MyLines.length, i = end2; MyTree[i].root; i = MyTree[i].parent) 
-  {
-    OUT(MyTree[i].x, MyTree[i].y) = MyLines.count;
-    j--;
-    MyLines.line[j][0] = MyTree[i].x;
-    MyLines.line[j][1] = MyTree[i].y;
   }
   return 1;
 }
