@@ -4,9 +4,9 @@
 #define RIDGE(x,y) MyParam.ridge[(y)+(x)*MyParam.h]
 #define DEG(x,y) MyParam.degree[(y)+(x)*MyParam.h]
 #define OUT(x,y) MyParam.out[(y)+(x)*MyParam.h]
-#define MAXLINE 10000
+#define MAXLINE 50000
 #define MAXNUMLINE 1000
-#define TREE 10001
+#define TREE 90001
 
 struct _param_t_
 {
